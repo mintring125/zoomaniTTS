@@ -8,6 +8,7 @@ import MessageHistory from './components/MessageHistory';
 import ttsService from './services/ttsService';
 import { checkUsageLimit, addUsage, saveMessage } from './services/storageService';
 import { TTS_CONSTANTS, PLAYER_STATUS, ERROR_MESSAGES } from './utils/constants';
+import { preprocessTextForTTS } from './utils/textPreprocessor';
 import './App.css';
 
 function App() {
@@ -67,9 +68,12 @@ function App() {
       setStatus(PLAYER_STATUS.LOADING);
       setError(null);
 
+      // 텍스트 전처리 (이모티콘 제거, URL 처리 등)
+      const processedText = preprocessTextForTTS(text);
+
       // TTS API 호출
       const response = await ttsService.synthesize({
-        text,
+        text: processedText,
         ...settings
       });
 
@@ -84,7 +88,7 @@ function App() {
         setStatus(PLAYER_STATUS.PLAYING);
       }
 
-      // 성공 시 사용량 추가 및 메시지 저장
+      // 성공 시 사용량 추가 및 메시지 저장 (원본 텍스트 사용)
       addUsage(text.length);
       saveMessage(text);
       setUsage(checkUsageLimit());
@@ -137,11 +141,11 @@ function App() {
     <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8 font-sans">
       <div className="max-w-3xl mx-auto space-y-8">
         {/* 심플한 헤더 */}
-        <div className="text-center py-4 bg-white rounded-2xl shadow-sm border border-gray-100 mb-8">
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight flex items-center justify-center gap-3">
+        <div className="text-center py-3 sm:py-4 bg-white rounded-2xl shadow-sm border border-gray-100 mb-8">
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight flex items-center justify-center gap-2 sm:gap-3 whitespace-nowrap px-2">
             <button
               onClick={handlePlay}
-              className="text-4xl text-blue-600 hover:scale-110 active:scale-95 transition-transform cursor-pointer"
+              className="text-3xl sm:text-4xl text-blue-600 hover:scale-110 active:scale-95 transition-transform cursor-pointer flex-shrink-0"
               title="읽어주기"
             >
               🔊
