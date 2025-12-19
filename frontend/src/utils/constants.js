@@ -1,8 +1,6 @@
 // API 설정
-// 배포 환경(Vercel)에서는 상대 경로 사용, 개발 환경에서는 환경 변수 또는 로컬 주소 사용
-export const API_BASE_URL = import.meta.env.PROD
-  ? '/api'
-  : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api');
+// 환경 변수 우선 사용, 없으면 로컬 개발 서버
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
 // TTS 설정 상수
 export const TTS_CONSTANTS = {
