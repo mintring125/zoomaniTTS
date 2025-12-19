@@ -9,6 +9,7 @@ import ttsService from './services/ttsService';
 import { checkUsageLimit, addUsage, saveMessage } from './services/storageService';
 import { TTS_CONSTANTS, PLAYER_STATUS, ERROR_MESSAGES } from './utils/constants';
 import { preprocessTextForTTS } from './utils/textPreprocessor';
+import { smartSplit } from './utils/textSplitter';
 import './App.css';
 
 function App() {
@@ -68,31 +69,77 @@ function App() {
       setStatus(PLAYER_STATUS.LOADING);
       setError(null);
 
-      // 텍스트 전처리 (이모티콘 제거, URL 처리 등)
+      // 텍스트 전처리
       const processedText = preprocessTextForTTS(text);
 
-      // TTS API 호출
-      const response = await ttsService.synthesize({
-        text: processedText,
-        ...settings
-      });
+      // 긴 텍스트는 청크로 분할 (500자 기준)
+      const chunks = smartSplit(processedText, 500);
 
-      // 오디오 URL 생성
-      const audioDataUri = response.audioContent;
-      setAudioUrl(audioDataUri);
+      if (chunks.length === 1) {
+        // 짧은 텍스트: 기존 방식
+        const response = await ttsService.synthesize({
+          text: processedText,
+          ...settings
+        });
 
-      // 오디오 재생
-      if (audioRef.current) {
-        audioRef.current.src = audioDataUri;
-        audioRef.current.play();
-        setStatus(PLAYER_STATUS.PLAYING);
+        const audioDataUri = response.audioContent;
+        setAudioUrl(audioDataUri);
+
+        if (audioRef.current) {
+          audioRef.current.src = audioDataUri;
+          audioRef.current.play();
+          setStatus(PLAYER_STATUS.PLAYING);
+        }
+      } else {
+        // 긴 텍스트: 청크 분할 재생
+        const audioChunks = [];
+
+        // 모든 청크를 병렬로 변환 (빠른 준비)
+        const chunkPromises = chunks.map(chunk =>
+          ttsService.synthesize({
+            text: chunk,
+            ...settings
+          })
+        );
+
+        const responses = await Promise.all(chunkPromises);
+
+        // 오디오 데이터 저장
+        responses.forEach(response => {
+          audioChunks.push(response.audioContent);
+        });
+
+        // 첫 번째 청크부터 순차 재생
+        let currentChunkIndex = 0;
+
+        const playNextChunk = () => {
+          if (currentChunkIndex < audioChunks.length) {
+            if (audioRef.current) {
+              audioRef.current.src = audioChunks[currentChunkIndex];
+              audioRef.current.play();
+              setStatus(PLAYER_STATUS.PLAYING);
+              currentChunkIndex++;
+            }
+          } else {
+            // 모든 청크 재생 완료
+            setStatus(PLAYER_STATUS.IDLE);
+          }
+        };
+
+        // 오디오 끝나면 다음 청크 재생
+        if (audioRef.current) {
+          audioRef.current.onended = playNextChunk;
+        }
+
+        // 첫 번째 청크 재생
+        playNextChunk();
       }
 
-      // 성공 시 사용량 추가 및 메시지 저장 (원본 텍스트 사용)
+      // 성공 시 사용량 추가 및 메시지 저장
       addUsage(text.length);
       saveMessage(text);
       setUsage(checkUsageLimit());
-      setHistoryKey(prev => prev + 1); // 히스토리 새로고침
+      setHistoryKey(prev => prev + 1);
 
     } catch (err) {
       console.error('TTS Error:', err);
